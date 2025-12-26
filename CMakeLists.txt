@@ -42,3 +42,6 @@ add_compile_definitions(INTP_CELL_LAYOUT)
 
 add_executable(facs src/main.cpp src/gFileRawData.cpp)
 target_include_directories(facs PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+
+add_executable(test_two_dof src/test_two_dof.cpp src/gFileRawData.cpp)
+target_include_directories(test_two_dof PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
