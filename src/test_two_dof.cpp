@@ -1,4 +1,4 @@
-#include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -9,77 +9,156 @@
 
 using namespace std::complex_literals;
 
-int main() {
+int main(int argc, char** argv) {
     std::cout << "Starting main\n";
 
     TwoDofParams params;
     params.couplingTerm = 0.05;
+    params.beta_val = 0.02;
+    params.Gamma_val = 1.6667;
 
     bool withSoundGap = false;
     std::size_t steps = 1000;
 
+    bool use_geo = false;
+    NumericEquilibrium<double>* equilibrium = nullptr;
+
+    if (argc >= 2) {
+        std::string gfile_path = argv[1];
+        std::ifstream gfile(gfile_path);
+        if (gfile.is_open()) {
+            GFileRawData gfile_data;
+            gfile >> gfile_data;
+            gfile.close();
+            if (gfile_data.is_complete()) {
+                equilibrium =
+                    new NumericEquilibrium<double>(gfile_data, 1000, 300, 0.96);
+                params.eq = equilibrium;
+                params.use_geo = true;
+                params.psi = (equilibrium->psi_range().first +
+                              equilibrium->psi_range().second) /
+                             2.0;
+                use_geo = true;
+                std::cout << "Loaded g-file: " << gfile_path << "\n";
+            } else {
+                std::cerr << "Failed to parse g-file, falling back to getM\n";
+            }
+        } else {
+            std::cerr << "Cannot open g-file: " << gfile_path
+                      << ", falling back to getM\n";
+        }
+    }
+
     std::cout << std::fixed << std::setprecision(6);
 
-    std::cout << "\n=== ALFVENICITY BENCHMARK (omega=0.1) ===\n";
-    double test_omega = 0.1;
-    FloquetMatrix4D<double> floquet(params, test_omega, withSoundGap, steps);
-    auto mults = floquetMultipliers(floquet.monodromy);
-    auto evals = eigenvalues(floquet.monodromy);
-    auto evecs = eigenvectors(floquet.monodromy);
+    std::vector<double> omega_values;
+    for (double w = 0.001; w <= 1.0; w += 0.001) { omega_values.push_back(w); }
+    EigenwaveAnalyzer analyzer(omega_values, params, withSoundGap, steps);
 
-    std::cout << "Floquet Multipliers:\n";
-    for (int i = 0; i < 4; ++i) {
-        std::cout << "  μ" << i << " = " << mults[i].real() << "+"
-                  << mults[i].imag() << "i\n";
-    }
-    std::cout << "\n";
+    const auto& soundWave = analyzer.soundWaveTable();
+    const auto& alfvenWave = analyzer.alfvenWaveTable();
 
-    double theta = 0.0;
-    auto M = getM(theta, test_omega, params, withSoundGap);
-    double M11_val = M[0][0];
-    double M22_val = M[1][1];
-
-    std::vector<double> alfvenicity_times;
-    const int bench_iterations = 10000;
-
-    for (int i = 0; i < 4; ++i) {
-        auto start = std::chrono::high_resolution_clock::now();
-        for (int j = 0; j < bench_iterations; ++j) {
-            volatile double alf =
-                alfvenicity(M11_val, M22_val, test_omega, evecs[i]);
-            (void)alf;
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-        auto dur =
-            std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-        double avg_ns = static_cast<double>(dur.count()) / bench_iterations;
-        alfvenicity_times.push_back(avg_ns);
-
-        double alf = alfvenicity(M11_val, M22_val, test_omega, evecs[i]);
-        std::cout << "Eigenpair " << i << ":\n";
-        std::cout << "  Eigenvalue: " << evals[i].real() << "+"
-                  << evals[i].imag() << "i\n";
-        std::cout << "  Eigenvector: [";
+    std::cout << "\n=== SOUND WAVE LIST ===\n";
+    for (size_t i = 0; i < soundWave.size(); ++i) {
+        std::cout << "SoundWave " << i << ":\n";
+        std::cout << "  EigenData: {\n";
+        std::cout << "    floquet_exponent: "
+                  << soundWave[i].floquet_exponent.real() << "+"
+                  << soundWave[i].floquet_exponent.imag() << "i,\n";
+        std::cout << "    eigenvector: [";
         for (int j = 0; j < 4; ++j) {
-            std::cout << evecs[i][j].real() << "+" << evecs[i][j].imag() << "i";
+            std::cout << soundWave[i].eigenvector[j].real() << "+"
+                      << soundWave[i].eigenvector[j].imag() << "i";
             if (j < 3) std::cout << ", ";
         }
-        std::cout << "]\n";
-        std::cout << "  Alfvenicity: " << alf << "\n";
-        std::cout << "  Average time: " << avg_ns << " ns\n\n";
+        std::cout << "],\n";
+        std::cout << "    alfvenicity_val: " << soundWave[i].alfvenicity_val
+                  << ",\n";
+        std::cout << "    omega: " << soundWave[i].omega << "\n";
+        std::cout << "  }\n\n";
     }
 
-    std::cout << "=== ALFVENICITY SUMMARY ===\n";
-    double alf_avg = 0, alf_min = 1e9, alf_max = 0;
-    for (size_t i = 0; i < alfvenicity_times.size(); ++i) {
-        alf_avg += alfvenicity_times[i];
-        alf_min = std::min(alf_min, alfvenicity_times[i]);
-        alf_max = std::max(alf_max, alfvenicity_times[i]);
+    std::cout << "\n=== ALFVEN WAVE LIST ===\n";
+    for (size_t i = 0; i < alfvenWave.size(); ++i) {
+        std::cout << "AlfvenWave " << i << ":\n";
+        std::cout << "  EigenData: {\n";
+        std::cout << "    floquet_exponent: "
+                  << alfvenWave[i].floquet_exponent.real() << "+"
+                  << alfvenWave[i].floquet_exponent.imag() << "i,\n";
+        std::cout << "    eigenvector: [";
+        for (int j = 0; j < 4; ++j) {
+            std::cout << alfvenWave[i].eigenvector[j].real() << "+"
+                      << alfvenWave[i].eigenvector[j].imag() << "i";
+            if (j < 3) std::cout << ", ";
+        }
+        std::cout << "],\n";
+        std::cout << "    alfvenicity_val: " << alfvenWave[i].alfvenicity_val
+                  << ",\n";
+        std::cout << "    omega: " << alfvenWave[i].omega << "\n";
+        std::cout << "  }\n\n";
     }
-    alf_avg /= alfvenicity_times.size();
-    std::cout << "Average time: " << alf_avg << " ns\n";
-    std::cout << "Min time: " << alf_min << " ns\n";
-    std::cout << "Max time: " << alf_max << " ns\n";
+
+    auto soundPts = analyzer.soundWavePoints();
+    auto alfvenPts = analyzer.alfvenWavePoints();
+
+    std::ofstream sound_file("sound_wave_points.csv");
+    sound_file << "x,y\n";
+    for (const auto& p : soundPts) { sound_file << p.x << "," << p.y << "\n"; }
+    sound_file.close();
+
+    std::ofstream alfven_file("alfven_wave_points.csv");
+    alfven_file << "x,y\n";
+    for (const auto& p : alfvenPts) {
+        alfven_file << p.x << "," << p.y << "\n";
+    }
+    alfven_file.close();
+
+    std::cout << "\n=== SOUND WAVE POINTS (x=imag(eigenvalue), y=omega) ===\n";
+    for (size_t i = 0; i < soundPts.size(); ++i) {
+        std::cout << "Point " << i << ": x = " << soundPts[i].x
+                  << ", y = " << soundPts[i].y << "\n";
+    }
+
+    std::cout << "\n=== ALFVEN WAVE POINTS (x=imag(eigenvalue), y=omega) ===\n";
+    for (size_t i = 0; i < alfvenPts.size(); ++i) {
+        std::cout << "Point " << i << ": x = " << alfvenPts[i].x
+                  << ", y = " << alfvenPts[i].y << "\n";
+    }
+
+    std::cout << "\n=== TESTING INTERPOLATION FUNCTIONS ===\n";
+
+    std::ofstream interp_file("interpolation_test.csv");
+    interp_file << "floquet_exponent,wave_type,omega\n";
+
+    std::vector<double> test_exponents;
+    for (double exp = -0.5; exp <= 0.5; exp += 0.05) {
+        test_exponents.push_back(exp);
+    }
+
+    for (double exp : test_exponents) {
+        std::cout << "\nTesting floquet exponent: " << exp << "\n";
+
+        std::cout << "  getSoundOmegas: [";
+        auto soundOmegas = analyzer.getSoundOmegas(exp);
+        for (size_t i = 0; i < soundOmegas.size(); ++i) {
+            std::cout << soundOmegas[i];
+            interp_file << exp << ",sound," << soundOmegas[i] << "\n";
+            if (i < soundOmegas.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]\n";
+
+        std::cout << "  getAlfvenOmegas: [";
+        auto alfvenOmegas = analyzer.getAlfvenOmegas(exp);
+        for (size_t i = 0; i < alfvenOmegas.size(); ++i) {
+            std::cout << alfvenOmegas[i];
+            interp_file << exp << ",alfven," << alfvenOmegas[i] << "\n";
+            if (i < alfvenOmegas.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]\n";
+    }
+    interp_file.close();
+
+    if (equilibrium) { delete equilibrium; }
 
     return 0;
 }

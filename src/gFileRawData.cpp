@@ -20,11 +20,13 @@ std::ifstream& operator>>(std::ifstream& is, GFileRawData& g) {
     std::getline(is, line);
     ss_line.str(line);
     ss_line.read(g.metadata.begin(), 48);
-    char str_tmp[4];
+    char str_tmp[8];
     ss_line.read(str_tmp, 4);
     ss_line.read(str_tmp, 4);
+    str_tmp[4] = '\0';
     g.nw = static_cast<unsigned>(atoi(str_tmp));
     ss_line.read(str_tmp, 4);
+    str_tmp[4] = '\0';
     g.nh = static_cast<unsigned>(atoi(str_tmp));
     if (!ss_line.eof()) {
         // There is extra metadata

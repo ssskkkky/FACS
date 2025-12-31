@@ -96,7 +96,7 @@ struct TwoDofParams {
     double B0 = 1.0;
     double q_val = 1.0;
     double R0 = 1.0;
-    double Gamma_val = 1.0;
+    double Gamma_val = 5.0 / 3.0;
     double beta_val = 1.0;
     double psi = 0.0;
     double deriv_term = 0.0;
@@ -105,8 +105,10 @@ struct TwoDofParams {
     bool use_geo = false;
 };
 
-inline std::array<std::array<double, 2>, 2>
-getMGeo(double theta, double omega, const TwoDofParams& params) {
+inline std::array<std::array<double, 2>, 2> getMGeo(double theta,
+                                                    double omega,
+                                                    const TwoDofParams& params,
+                                                    bool withSoundGap) {
     // Compute theta-dependent quantities
     double J = params.eq->safety_factor(params.psi) *
                std::sqrt(params.eq->j_func(params.psi, theta));
@@ -114,7 +116,7 @@ getMGeo(double theta, double omega, const TwoDofParams& params) {
     double deriv_term = params.eq->radial_func(params.psi, theta);
 
     // Compute kappa_g with theta dependence
-    double eps = 0.01;  // This is absolutely wrong, I will deal with this later
+    double eps = 0.01;
     double F_psi = params.eq->intp_data().intp_1d[1](params.psi);
     double R = params.eq->intp_data().intp_2d[1](params.psi, theta);
     double B_phi = F_psi / R;
@@ -135,6 +137,10 @@ getMGeo(double theta, double omega, const TwoDofParams& params) {
         deriv_term;
     double M22 =
         (omega * omega / (omegaS_q_R0 * omegaS_q_R0)) * (J * J * B0 * B0);
+
+    // Apply sound gap correction if enabled
+    if (withSoundGap) { M22 *= (1.0 + deriv_term); }
+
     double off_diag = std::sqrt(2 * params.Gamma_val * params.beta_val) *
                       (J * J * B0 * B0) * kappa_g * (omega / omegaS_q_R0);
     double M12 = off_diag;
@@ -147,7 +153,7 @@ inline std::array<std::array<double, 2>, 2> getM(double theta,
                                                  const TwoDofParams& params,
                                                  bool withSoundGap) {
     if (params.use_geo) {
-        return getMGeo(theta, omega, params);
+        return getMGeo(theta, omega, params, withSoundGap);
     } else {
         double M11 = params.deltaPrime * std::cos(theta) +
                      (omega * omega / (params.omegaA * params.omegaA)) *
@@ -639,5 +645,230 @@ inline double alfvenicity(double M11,
 
     return numerator / denominator;
 }
+
+struct EigenData {
+    std::complex<double> floquet_exponent;
+    Vec4 eigenvector;
+    double alfvenicity_val;
+    double omega;
+};
+
+struct Point {
+    double x;
+    double y;
+    double z;
+};
+
+struct OmegaAlfvenicity {
+    double omega;
+    double alfvenicity;
+};
+
+inline std::ostream& operator<<(std::ostream& os, const OmegaAlfvenicity& oa) {
+    os << "{omega=" << oa.omega << ", alfvenicity=" << oa.alfvenicity << "}";
+    return os;
+}
+
+class EigenwaveAnalyzer {
+   private:
+    std::vector<EigenData> soundWaveList;
+    std::vector<EigenData> alfvenWaveList;
+    TwoDofParams params;
+    bool withSoundGap;
+    std::size_t steps;
+    double omega_step;
+
+   public:
+    EigenwaveAnalyzer(const std::vector<double>& omega_values,
+                      const TwoDofParams& p,
+                      bool wsg,
+                      std::size_t s)
+        : params(p), withSoundGap(wsg), steps(s) {
+        if (omega_values.size() >= 2) {
+            omega_step = omega_values[1] - omega_values[0];
+        } else {
+            omega_step = 0.01;
+        }
+        for (double test_omega : omega_values) {
+            FloquetMatrix4D<double> floquet(params, test_omega, withSoundGap,
+                                            steps);
+            auto evals = floquetExponents(floquet.monodromy);
+            auto evecs = eigenvectors(floquet.monodromy);
+
+            double theta = 0.0;
+            std::array<std::array<double, 2>, 2> M;
+            M = getM(theta, test_omega, params, withSoundGap);
+            double M11_val = M[0][0];
+            double M22_val = M[1][1];
+
+            std::vector<EigenData> omegaEigenData;
+
+            for (int i = 0; i < 4; ++i) {
+                EigenData data;
+                data.floquet_exponent = evals[i];
+                data.eigenvector = evecs[i];
+                data.alfvenicity_val =
+                    alfvenicity(M11_val, M22_val, test_omega, evecs[i]);
+                data.omega = test_omega;
+                omegaEigenData.push_back(data);
+            }
+
+            std::sort(omegaEigenData.begin(), omegaEigenData.end(),
+                      [](const EigenData& a, const EigenData& b) {
+                          return a.alfvenicity_val < b.alfvenicity_val;
+                      });
+
+            for (int i = 0; i < 2; ++i) {
+                soundWaveList.push_back(omegaEigenData[i]);
+            }
+
+            for (int i = 2; i < 4; ++i) {
+                alfvenWaveList.push_back(omegaEigenData[i]);
+            }
+        }
+    }
+
+    const std::vector<EigenData>& soundWaveTable() const {
+        return soundWaveList;
+    }
+
+    const std::vector<EigenData>& alfvenWaveTable() const {
+        return alfvenWaveList;
+    }
+
+    std::vector<Point> soundWavePoints() const {
+        std::vector<Point> points;
+        double epsilon = 1e-6;
+        for (const auto& data : soundWaveList) {
+            double x = data.floquet_exponent.imag();
+            if (std::abs(x) < epsilon ||
+                std::abs(std::abs(x) - 0.5) < epsilon) {
+                continue;
+            }
+            Point p;
+            p.x = x;
+            p.y = data.omega;
+            p.z = data.alfvenicity_val;
+            points.push_back(p);
+        }
+        return points;
+    }
+
+    std::vector<Point> alfvenWavePoints() const {
+        std::vector<Point> points;
+        double epsilon = 1e-6;
+        for (const auto& data : alfvenWaveList) {
+            double x = data.floquet_exponent.imag();
+            if (std::abs(x) < epsilon ||
+                std::abs(std::abs(x) - 0.5) < epsilon) {
+                continue;
+            }
+            Point p;
+            p.x = x;
+            p.y = data.omega;
+            p.z = data.alfvenicity_val;
+            points.push_back(p);
+        }
+        return points;
+    }
+
+    std::vector<OmegaAlfvenicity> getSoundOmegas(
+        double floquetExponent,
+        double tolerance_override = -1.0,
+        double min_spacing_factor = 0.01) const {
+        std::vector<OmegaAlfvenicity> result;
+        double x = floquetExponent;
+        while (x > 0.5) x -= 1.0;
+        while (x < -0.5) x += 1.0;
+        auto points = soundWavePoints();
+        if (points.empty()) return result;
+
+        double tolerance = tolerance_override >= 0
+                               ? tolerance_override
+                               : (omega_step / params.omegaS) / 2.0;
+
+        double minDist = std::abs(points[0].x - x);
+        for (const auto& p : points) {
+            double dist = std::abs(p.x - x);
+            minDist = std::min(minDist, dist);
+        }
+
+        std::vector<OmegaAlfvenicity> candidates;
+        for (const auto& p : points) {
+            if (std::abs(p.x - x) <= minDist + tolerance) {
+                OmegaAlfvenicity oa;
+                oa.omega = p.y;
+                oa.alfvenicity = p.z;
+                candidates.push_back(oa);
+            }
+        }
+
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const OmegaAlfvenicity& a, const OmegaAlfvenicity& b) {
+                      return a.omega < b.omega;
+                  });
+
+        double min_spacing = min_spacing_factor * params.omegaS;
+        for (const auto& oa : candidates) {
+            if (result.empty()) {
+                result.push_back(oa);
+            } else {
+                if (oa.omega - result.back().omega >= min_spacing) {
+                    result.push_back(oa);
+                }
+            }
+        }
+        return result;
+    }
+
+    std::vector<OmegaAlfvenicity> getAlfvenOmegas(
+        double floquetExponent,
+        double tolerance_override = -1.0,
+        double min_spacing_factor = 0.01) const {
+        std::vector<OmegaAlfvenicity> result;
+        double x = floquetExponent;
+        while (x > 0.5) x -= 1.0;
+        while (x < -0.5) x += 1.0;
+        auto points = alfvenWavePoints();
+        if (points.empty()) return result;
+
+        double tolerance = tolerance_override >= 0
+                               ? tolerance_override
+                               : 2.0 * omega_step / params.omegaA;
+
+        double minDist = std::abs(points[0].x - x);
+        for (const auto& p : points) {
+            double dist = std::abs(p.x - x);
+            minDist = std::min(minDist, dist);
+        }
+
+        std::vector<OmegaAlfvenicity> candidates;
+        for (const auto& p : points) {
+            if (std::abs(p.x - x) <= minDist + tolerance) {
+                OmegaAlfvenicity oa;
+                oa.omega = p.y;
+                oa.alfvenicity = p.z;
+                candidates.push_back(oa);
+            }
+        }
+
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const OmegaAlfvenicity& a, const OmegaAlfvenicity& b) {
+                      return a.omega < b.omega;
+                  });
+
+        double min_spacing = min_spacing_factor * params.omegaA;
+        for (const auto& oa : candidates) {
+            if (result.empty()) {
+                result.push_back(oa);
+            } else {
+                if (oa.omega - result.back().omega >= min_spacing) {
+                    result.push_back(oa);
+                }
+            }
+        }
+        return result;
+    }
+};
 
 #endif  // TWO_DOF_CONTINUUM_H
