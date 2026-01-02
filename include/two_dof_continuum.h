@@ -110,10 +110,16 @@ inline std::array<std::array<double, 2>, 2> getMGeo(double theta,
                                                     const TwoDofParams& params,
                                                     bool withSoundGap) {
     // Compute theta-dependent quantities
-    double J = params.eq->safety_factor(params.psi) *
-               std::sqrt(params.eq->j_func(params.psi, theta));
-    double B0 = params.eq->intp_data().intp_2d[0](params.psi, theta);
-    double deriv_term = params.eq->radial_func(params.psi, theta);
+    double J2_matteo2019_times_B_axis =
+        params.eq->safety_factor(params.psi) *
+        params.eq->safety_factor(params.psi) *
+        std::sqrt(params.eq->j_func(params.psi, theta));
+    double B0_over_B_axis =
+        params.eq->intp_data().intp_2d[0](params.psi, theta);
+    double JB2_matteo2019 = J_matteo2019_times_B_axis * B0_over_B_axis *
+                            J_matteo2019_times_B_axis * B0_over_B_axis;
+    // double B0 = 1.0;
+    double deriv_term = -params.eq->radial_func(params.psi, theta);
 
     // Compute kappa_g with theta dependence
     double eps = 0.01;
@@ -121,28 +127,32 @@ inline std::array<std::array<double, 2>, 2> getMGeo(double theta,
     double R = params.eq->intp_data().intp_2d[1](params.psi, theta);
     double B_phi = F_psi / R;
     double B_p = std::sqrt(B0 * B0 - B_phi * B_phi);
-    double grad_psi =
-        J / (params.eq->intp_data().intp_1d[0](params.psi) * R * B_p);
+    double grad_psi = J / (params.eq->intp_data().intp_1d[0](params.psi) * R *
+                           B_p);  // ????????????????????????
     double dB_dtheta =
         (params.eq->intp_data().intp_2d[0](params.psi, theta + eps) -
          params.eq->intp_data().intp_2d[0](params.psi, theta - eps)) /
         (2 * eps);
-    double kappa_g = (F_psi / grad_psi) * (dB_dtheta / (J * B0 * B0));
-    double omegaA_q_R0 = 1.0;
+    double kappa_g = (F_psi / grad_psi) * (dB_dtheta / (JB2_matteo2019));
+    double omegaA_q_R0 = params.eq->safety_factor(params.psi);
     double omegaS_q_R0 = std::sqrt(params.beta_val / 2.0) * omegaA_q_R0;
 
     // Compute matrix elements
     double M11 =
-        (omega * omega * J * J * B0 * B0) / (omegaA_q_R0 * omegaA_q_R0) -
+        (omega * omega * JB2_matteo2019) / (omegaA_q_R0 * omegaA_q_R0) -
         deriv_term;
+    // double M11 = params.eq->radial_func(params.psi, theta) +
+    //              omega * omega * params.eq->j_func(params.psi, theta);
     double M22 =
-        (omega * omega / (omegaS_q_R0 * omegaS_q_R0)) * (J * J * B0 * B0);
+        (omega * omega / (omegaS_q_R0 * omegaS_q_R0)) * (JB2_matteo2019);
 
-    // Apply sound gap correction if enabled
+    // Apply sound gap correction if enabled, of course this is just AI
+    // illusion, but I'd like to keep this interface
     if (withSoundGap) { M22 *= (1.0 + deriv_term); }
 
     double off_diag = std::sqrt(2 * params.Gamma_val * params.beta_val) *
-                      (J * J * B0 * B0) * kappa_g * (omega / omegaS_q_R0);
+                      (J_matteo2019 * J_matteo2019) * kappa_g *
+                      (omega / omegaS_q_R0);
     double M12 = off_diag;
     double M21 = off_diag;
     return {{{M11, M12}, {M21, M22}}};

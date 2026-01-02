@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
         params.Gamma_val = Gamma_val;
 
         std::vector<double> omega_values;
-        for (double w = 0.001; w <= 1.0; w += 0.001) {
+        for (double w = 0.001; w <= 2.0; w += 0.01) {
             omega_values.push_back(w);
         }
 

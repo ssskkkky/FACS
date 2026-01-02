@@ -56,74 +56,54 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
     """Create Omega vs minor_radius plots"""
 
     r_vals = [d["minor_radius"] for d in data]
-    nqm_vals = [d["nqm"] for d in data]
-
-    # Find resonance surface (closest to n*q-m = 0)
-    res_idx = min(range(len(nqm_vals)), key=lambda i: abs(nqm_vals[i]))
-    res_r = r_vals[res_idx]
-    res_psi = data[res_idx]["psi"]
 
     fig = plt.figure(figsize=(16, 10))
     gs = GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.3)
 
     # Plot 1: Sound wave continuum
     ax1 = fig.add_subplot(gs[0, 0])
+    sound_r = []
+    sound_omega = []
     for d in data:
         for omega in d["sound_omegas"]:
-            ax1.scatter(
-                d["minor_radius"],
-                omega,
-                c="blue",
-                s=50,
-                alpha=0.6,
-                edgecolors="white",
-                linewidth=0.5,
-                zorder=2,
-            )
-
-    ax1.axvline(
-        x=res_r,
-        color="red",
-        linestyle="--",
-        linewidth=3,
-        label=f"Resonance r/a={res_r:.5f}",
-        alpha=0.7,
-        zorder=1,
+            sound_r.append(d["minor_radius"])
+            sound_omega.append(omega)
+    ax1.scatter(
+        sound_r,
+        sound_omega,
+        c="blue",
+        s=50,
+        alpha=0.6,
+        edgecolors="white",
+        linewidth=0.5,
+        zorder=2,
     )
     ax1.set_xlabel("Minor radius r/a", fontsize=14, fontweight="bold")
     ax1.set_ylabel("Omega (frequency)", fontsize=14, fontweight="bold")
     ax1.set_title("Sound Wave Continuum: Omega vs r/a", fontsize=15, fontweight="bold")
-    ax1.legend(fontsize=12)
     ax1.grid(True, alpha=0.3)
 
     # Plot 2: Alfven wave continuum
     ax2 = fig.add_subplot(gs[0, 1])
+    alfven_r = []
+    alfven_omega = []
     for d in data:
         for omega in d["alfven_omegas"]:
-            ax2.scatter(
-                d["minor_radius"],
-                omega,
-                c="orange",
-                s=50,
-                alpha=0.7,
-                edgecolors="white",
-                linewidth=0.5,
-                zorder=2,
-            )
-
-    ax2.axvline(
-        x=res_r,
-        color="red",
-        linestyle="--",
-        linewidth=3,
-        label="Resonance",
+            alfven_r.append(d["minor_radius"])
+            alfven_omega.append(omega)
+    ax2.scatter(
+        alfven_r,
+        alfven_omega,
+        c="orange",
+        s=50,
         alpha=0.7,
-        zorder=1,
+        edgecolors="white",
+        linewidth=0.5,
+        zorder=2,
     )
     ax2.set_xlabel("Minor radius r/a", fontsize=14, fontweight="bold")
     ax2.set_ylabel("Omega", fontsize=14, fontweight="bold")
     ax2.set_title("Alfvén Wave Continuum: Omega vs r/a", fontsize=15, fontweight="bold")
-    ax2.legend(fontsize=12)
     ax2.grid(True, alpha=0.3)
 
     # Plot 3: Combined continuum, graylevel by alfvenicity (1=dark, 0=invisible)
@@ -161,57 +141,12 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
         all_r, all_omega, c="black", s=50, alpha=all_alpha, edgecolors="none", zorder=2
     )
 
-    ax3.axvline(
-        x=res_r,
-        color="red",
-        linestyle="--",
-        linewidth=3,
-        label="Resonance",
-        alpha=0.7,
-        zorder=1,
-    )
     ax3.set_xlabel("Minor radius r/a", fontsize=13, fontweight="bold")
     ax3.set_ylabel("Omega", fontsize=13, fontweight="bold")
     ax3.set_title(
         "Combined Continuum (grayscale by alfvenicity)", fontsize=14, fontweight="bold"
     )
-    ax3.legend(fontsize=11)
     ax3.grid(True, alpha=0.3)
-
-    # Plot 4: n*q-m vs r/a
-    ax4 = fig.add_subplot(gs[1, 1])
-    ax4.plot(r_vals, nqm_vals, "g-o", linewidth=3, markersize=10, label="n*q - m")
-    ax4.axhline(
-        y=0,
-        color="red",
-        linestyle="--",
-        linewidth=2,
-        label="Resonance (n*q-m=0)",
-        alpha=0.7,
-    )
-    ax4.axvline(
-        x=res_r,
-        color="purple",
-        linestyle=":",
-        linewidth=2,
-        alpha=0.7,
-        label="Resonance surface",
-    )
-    ax4.scatter(
-        [res_r],
-        [nqm_vals[res_idx]],
-        s=500,
-        c="red",
-        marker="*",
-        edgecolors="black",
-        linewidth=2,
-        zorder=3,
-    )
-    ax4.set_xlabel("Minor radius r/a", fontsize=13, fontweight="bold")
-    ax4.set_ylabel("n*q - m (n=5, m=10)", fontsize=13, fontweight="bold")
-    ax4.set_title("Resonance Parameter Profile", fontsize=14, fontweight="bold")
-    ax4.legend(fontsize=11)
-    ax4.grid(True, alpha=0.3)
 
     plt.savefig(output_file, dpi=150, bbox_inches="tight")
     print(f"Saved: {output_file}")
@@ -234,26 +169,14 @@ def main():
     r_vals = [d["minor_radius"] for d in data]
 
     print("=" * 80)
-    print("                    RESONANCE CONTINUUM ANALYSIS                    ")
+    print("                    CONTINUUM ANALYSIS                    ")
     print("=" * 80)
     print(f"\n[CONFIGURATION]")
     print(f"  Mode numbers: n=5, m=10")
-    print(f"  Resonance condition: n*q - m = 0  →  q = m/n = 2.0")
     print(f"  Total surfaces analyzed: {len(data)}")
     print(f"\n[X-AXIS: Minor radius r/a (equally spaced)]")
     print(f"  Range: [{min(r_vals):.4f}, {max(r_vals):.4f}]")
     print(f"  Spacing: {r_vals[1] - r_vals[0]:.4f}")
-
-    nqm_vals = [d["nqm"] for d in data]
-    res_idx = min(range(len(nqm_vals)), key=lambda i: abs(nqm_vals[i]))
-    res_data = data[res_idx]
-
-    print(f"\n[RESONANCE SURFACE]")
-    print(f"  Index:             {res_idx}")
-    print(f"  r/a:              {res_data['minor_radius']:.6f}")
-    print(f"  Psi:              {res_data['psi']:.6f}")
-    print(f"  Safety factor q:   {res_data['q']:.6f}")
-    print(f"  n*q - m:          {res_data['nqm']:+.6f}")
 
     print("\n[GENERATING PLOTS]")
     plot_continuum_vs_minor_radius(data)
