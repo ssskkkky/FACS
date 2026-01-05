@@ -36,11 +36,12 @@ def read_resonance_data(filename):
 
             data.append(
                 {
+                    "n": int(row["n"]),
                     "index": int(row["index"]),
                     "minor_radius": float(row["minor_radius"]),
                     "psi": float(row["psi"]),
                     "q": float(row["q"]),
-                    "nqm": float(row["nqm"]),
+                    "nq": float(row["nq"]),
                     "sound_branches": int(row["sound_branches"]),
                     "alfven_branches": int(row["alfven_branches"]),
                     "sound_omegas": sound_omegas,
@@ -57,6 +58,9 @@ def plot_continuum_vs_minor_radius(
 ):
     """Create Omega vs minor_radius plots"""
 
+    n_vals = sorted(list(set([d["n"] for d in data])))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(n_vals)))
+
     r_vals = [d["minor_radius"] for d in data]
 
     fig = plt.figure(figsize=(16, 10))
@@ -64,76 +68,95 @@ def plot_continuum_vs_minor_radius(
 
     # Plot 1: Sound wave continuum
     ax1 = fig.add_subplot(gs[0, 0])
-    sound_r = []
-    sound_omega = []
-    for d in data:
-        for omega in d["sound_omegas"]:
-            sound_r.append(d["minor_radius"])
-            sound_omega.append(omega)
-    ax1.scatter(
-        sound_r,
-        sound_omega,
-        c="blue",
-        s=10,
-        alpha=0.6,
-        edgecolors="none",
-        linewidth=0,
-        zorder=2,
-    )
+    for idx, n in enumerate(n_vals):
+        sound_r = []
+        sound_omega = []
+        for d in data:
+            if d["n"] == n:
+                for omega in d["sound_omegas"]:
+                    sound_r.append(d["minor_radius"])
+                    sound_omega.append(omega)
+        ax1.scatter(
+            sound_r,
+            sound_omega,
+            c=[colors[idx]],
+            s=10,
+            alpha=0.6,
+            edgecolors="none",
+            linewidth=0,
+            zorder=2,
+            label=f"n={n}",
+        )
     ax1.set_xlabel("Minor radius r/a", fontsize=14, fontweight="bold")
     ax1.set_ylabel("Omega (frequency)", fontsize=14, fontweight="bold")
     ax1.set_title("Sound Wave Continuum: Omega vs r/a", fontsize=15, fontweight="bold")
     ax1.grid(True, alpha=0.3)
+    if len(n_vals) > 1:
+        ax1.legend(fontsize=10)
 
     # Plot 2: Alfven wave continuum
     ax2 = fig.add_subplot(gs[0, 1])
-    alfven_r = []
-    alfven_omega = []
-    for d in data:
-        for omega in d["alfven_omegas"]:
-            alfven_r.append(d["minor_radius"])
-            alfven_omega.append(omega)
-    ax2.scatter(
-        alfven_r,
-        alfven_omega,
-        c="orange",
-        s=10,
-        alpha=0.7,
-        edgecolors="none",
-        linewidth=0,
-        zorder=2,
-    )
+    for idx, n in enumerate(n_vals):
+        alfven_r = []
+        alfven_omega = []
+        for d in data:
+            if d["n"] == n:
+                for omega in d["alfven_omegas"]:
+                    alfven_r.append(d["minor_radius"])
+                    alfven_omega.append(omega)
+        ax2.scatter(
+            alfven_r,
+            alfven_omega,
+            c=[colors[idx]],
+            s=10,
+            alpha=0.7,
+            edgecolors="none",
+            linewidth=0,
+            zorder=2,
+            label=f"n={n}",
+        )
     ax2.set_xlabel("Minor radius r/a", fontsize=14, fontweight="bold")
     ax2.set_ylabel("Omega", fontsize=14, fontweight="bold")
     ax2.set_title("Alfvén Wave Continuum: Omega vs r/a", fontsize=15, fontweight="bold")
     ax2.grid(True, alpha=0.3)
+    if len(n_vals) > 1:
+        ax2.legend(fontsize=10)
 
-    # Plot 3: Combined continuum, graylevel by alfvenicity (1=dark, 0.1=light)
+    # Plot 3: Combined continuum, color by n, graylevel by alfvenicity (1=dark, 0.1=light)
     ax3 = fig.add_subplot(gs[1, 0])
     sound_count = 0
     alfven_count = 0
     all_r = []
     all_omega = []
     all_alpha = []
+    all_colors = []
 
-    for d in data:
-        # Sound waves with alfvenicity
-        for i, omega in enumerate(d["sound_omegas"]):
-            if i < len(d.get("sound_alfvenicities", [])):
-                alfvenicity = min(max(abs(d["sound_alfvenicities"][i]), 0.0), 1.0)
-                all_r.append(d["minor_radius"])
-                all_omega.append(omega)
-                all_alpha.append(alfvenicity)
-                sound_count += 1
+    for idx, n in enumerate(n_vals):
+        for d in data:
+            if d["n"] == n:
+                # Sound waves with alfvenicity
+                for i, omega in enumerate(d["sound_omegas"]):
+                    if i < len(d.get("sound_alfvenicities", [])):
+                        alfvenicity = min(
+                            max(abs(d["sound_alfvenicities"][i]), 0.0), 1.0
+                        )
+                        all_r.append(d["minor_radius"])
+                        all_omega.append(omega)
+                        all_alpha.append(alfvenicity)
+                        all_colors.append(colors[idx])
+                        sound_count += 1
 
-        # Alfven waves with alfvenicity
-        for i, omega in enumerate(d["alfven_omegas"]):
-            if i < len(d.get("alfven_alfvenicities", [])):
-                alfvenicity = min(max(abs(d["alfven_alfvenicities"][i]), 0.0), 1.0)
-                all_r.append(d["minor_radius"])
-                all_omega.append(omega)
-                all_alpha.append(alfvenicity)
-                alfven_count += 1
+                # Alfven waves with alfvenicity
+                for i, omega in enumerate(d["alfven_omegas"]):
+                    if i < len(d.get("alfven_alfvenicities", [])):
+                        alfvenicity = min(
+                            max(abs(d["alfven_alfvenicities"][i]), 0.0), 1.0
+                        )
+                        all_r.append(d["minor_radius"])
+                        all_omega.append(omega)
+                        all_alpha.append(alfvenicity)
+                        all_colors.append(colors[idx])
+                        alfven_count += 1
 
     print(
         f"Debug: Plotted {sound_count} sound points, {alfven_count} alfven points in combined plot"
@@ -145,7 +168,7 @@ def plot_continuum_vs_minor_radius(
     ax3.scatter(
         all_r,
         all_omega,
-        c="black",
+        c=all_colors,
         s=10,
         alpha=all_alpha_scaled,
         edgecolors="none",
@@ -155,11 +178,25 @@ def plot_continuum_vs_minor_radius(
     ax3.set_xlabel("Minor radius r/a", fontsize=13, fontweight="bold")
     ax3.set_ylabel("Omega", fontsize=13, fontweight="bold")
     ax3.set_title(
-        "Combined Continuum (grayscale 0.1-1.0 by alfvenicity)",
+        "Combined Continuum (color by n, grayscale 0.1-1.0 by alfvenicity)",
         fontsize=14,
         fontweight="bold",
     )
     ax3.grid(True, alpha=0.3)
+    if len(n_vals) > 1:
+        legend_elements = [
+            plt.Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor=colors[idx],
+                markersize=8,
+                label=f"n={n}",
+            )
+            for idx, n in enumerate(n_vals)
+        ]
+        ax3.legend(handles=legend_elements, loc="upper right", fontsize=10)
 
     plt.savefig(output_file, dpi=150, bbox_inches="tight")
     print(f"Saved: {output_file}")
@@ -179,14 +216,16 @@ def main():
         print(f"Error: No data found in {csv_file}")
         return
 
+    n_vals = sorted(list(set([d["n"] for d in data])))
     r_vals = [d["minor_radius"] for d in data]
 
     print("=" * 80)
     print("                    CONTINUUM ANALYSIS                    ")
     print("=" * 80)
     print(f"\n[CONFIGURATION]")
-    print(f"  Mode numbers: n=5, m=10")
+    print(f"  Mode numbers: n = {', '.join(map(str, n_vals))}")
     print(f"  Total surfaces analyzed: {len(data)}")
+    print(f"  Total n values: {len(n_vals)}")
     print(f"\n[X-AXIS: Minor radius r/a (equally spaced)]")
     print(f"  Range: [{min(r_vals):.4f}, {max(r_vals):.4f}]")
     print(f"  Spacing: {r_vals[1] - r_vals[0]:.4f}")

@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 #include "../include/Floquet_two_dof.h"
@@ -8,17 +9,24 @@
 #include "../include/gFileRawData.h"
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
+    if (argc < 3) {
         std::cerr << "Usage: " << argv[0]
-                  << " <path_to_gfile> [num_surfaces] [Gamma_val]\n";
+                  << " <path_to_gfile> <num_surfaces> <n_values>\n";
+        std::cerr << "Example: " << argv[0] << " gfile 100 5,10,15\n";
         return 1;
     }
 
     std::string gfile_path = argv[1];
-    std::size_t num_surfaces = 100;
-    if (argc >= 3) { num_surfaces = std::stoul(argv[2]); }
-    double Gamma_val = 1.6667;
-    if (argc >= 4) { Gamma_val = std::stod(argv[3]); }
+    std::size_t num_surfaces = std::stoul(argv[2]);
+    double Gamma_val = 5.0 / 3.0;
+
+    std::vector<int> n_values;
+    std::string n_str = argv[3];
+    std::stringstream ss(n_str);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        n_values.push_back(std::stoi(token));
+    }
 
     std::ifstream gfile(gfile_path);
     if (!gfile.is_open()) {
@@ -40,14 +48,17 @@ int main(int argc, char** argv) {
     std::size_t radial_grid = 1000;
     std::size_t poloidal_grid = 300;
 
-    int n = 5;
-    int m = 10;
     bool withSoundGap = false;
     std::size_t steps = 1000;
 
     std::cout << "\n=== CONFIGURATION ===\n";
     std::cout << "Number of surfaces: " << num_surfaces << "\n";
-    std::cout << "n = " << n << ", m = " << m << "\n";
+    std::cout << "n values: ";
+    for (size_t i = 0; i < n_values.size(); ++i) {
+        std::cout << n_values[i];
+        if (i < n_values.size() - 1) std::cout << ", ";
+    }
+    std::cout << "\n";
     std::cout << "Gamma_val = " << Gamma_val << "\n";
     std::cout << "withSoundGap = " << (withSoundGap ? "true" : "false") << "\n";
     std::cout << "Integration steps: " << steps << "\n\n";
@@ -60,16 +71,12 @@ int main(int argc, char** argv) {
               << "]\n\n";
 
     std::ofstream out("continuum_with_sound_coupling.csv");
-    out << "index,minor_radius,psi,q,nqm,sound_branches,alfven_branches,";
+    out << "n,index,minor_radius,psi,q,nq,sound_branches,alfven_branches,";
     out << "sound_omegas,sound_alfvenicities,alfven_omegas,alfven_"
            "alfvenicities\n";
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << std::setw(10) << "Index" << std::setw(12) << "r/a"
-              << std::setw(12) << "Psi" << std::setw(10) << "q" << std::setw(10)
-              << "n*q-m" << std::setw(15) << "Sound" << std::setw(15)
-              << "Alfven" << "\n";
-    std::cout << std::string(80, '-') << "\n";
+    std::vector<double> omega_values;
+    for (double w = 0.001; w <= 1.0; w += 0.005) { omega_values.push_back(w); }
 
     for (std::size_t i = 0; i < num_surfaces; ++i) {
         double target_r = (i + 0.5) / num_surfaces;
@@ -108,7 +115,6 @@ int main(int argc, char** argv) {
         }
 
         double q = eq.safety_factor(psi);
-        double nqm = n * q - m;
         double r_minor = eq.minor_radius(psi);
 
         TwoDofParams params;
@@ -118,55 +124,62 @@ int main(int argc, char** argv) {
         params.beta_val = 0.0206494;
         params.Gamma_val = Gamma_val;
 
-        std::vector<double> omega_values;
-        for (double w = 0.001; w <= 1.0; w += 0.005) {
-            omega_values.push_back(w);
-        }
-
         std::size_t continuum_steps = 500;
         EigenwaveAnalyzer analyzer(omega_values, params, withSoundGap,
                                    continuum_steps);
 
-        auto sound_oas = analyzer.getSoundOmegas(nqm);
-        auto alfven_oas = analyzer.getAlfvenOmegas(nqm);
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "\n=== FLUX SURFACE " << i << " (r/a=" << r_minor
+                  << ") ===\n";
+        std::cout << std::setw(5) << "n" << std::setw(10) << "n*q"
+                  << std::setw(15) << "Sound" << std::setw(15) << "Alfven"
+                  << "\n";
+        std::cout << std::string(45, '-') << "\n";
 
-        std::cout << std::setw(10) << i << std::setw(12) << r_minor
-                  << std::setw(12) << psi << std::setw(10) << q << std::setw(10)
-                  << nqm << std::setw(15) << sound_oas.size() << std::setw(15)
-                  << alfven_oas.size();
+        for (int n : n_values) {
+            double nq = n * q;
 
-        if (abs(nqm) < 0.05) { std::cout << "  <<< RESONANCE"; }
-        std::cout << "\n";
+            auto sound_oas = analyzer.getSoundOmegas(nq);
+            auto alfven_oas = analyzer.getAlfvenOmegas(nq);
 
-        out << i << "," << r_minor << "," << psi << "," << q << "," << nqm
-            << "," << sound_oas.size() << "," << alfven_oas.size() << ",\"[";
+            std::cout << std::setw(5) << n << std::setw(10) << nq
+                      << std::setw(15) << sound_oas.size() << std::setw(15)
+                      << alfven_oas.size();
 
-        for (size_t j = 0; j < sound_oas.size(); ++j) {
-            out << sound_oas[j].omega;
-            if (j < sound_oas.size() - 1) out << ";";
+            if (abs(nq) < 0.05) { std::cout << "  <<< RESONANCE"; }
+            std::cout << "\n";
+
+            out << n << "," << i << "," << r_minor << "," << psi << "," << q
+                << "," << nq << "," << sound_oas.size() << ","
+                << alfven_oas.size() << ",\"[";
+
+            for (size_t j = 0; j < sound_oas.size(); ++j) {
+                out << sound_oas[j].omega;
+                if (j < sound_oas.size() - 1) out << ";";
+            }
+            out << "]\",[";
+
+            for (size_t j = 0; j < sound_oas.size(); ++j) {
+                out << sound_oas[j].alfvenicity;
+                if (j < sound_oas.size() - 1) out << ";";
+            }
+            out << "]\",[";
+
+            for (size_t j = 0; j < alfven_oas.size(); ++j) {
+                out << alfven_oas[j].omega;
+                if (j < alfven_oas.size() - 1) out << ";";
+            }
+            out << "]\",[";
+
+            for (size_t j = 0; j < alfven_oas.size(); ++j) {
+                out << alfven_oas[j].alfvenicity;
+                if (j < alfven_oas.size() - 1) out << ";";
+            }
+            out << "]\n";
         }
-        out << "]\",[";
-
-        for (size_t j = 0; j < sound_oas.size(); ++j) {
-            out << sound_oas[j].alfvenicity;
-            if (j < sound_oas.size() - 1) out << ";";
-        }
-        out << "]\",[";
-
-        for (size_t j = 0; j < alfven_oas.size(); ++j) {
-            out << alfven_oas[j].omega;
-            if (j < alfven_oas.size() - 1) out << ";";
-        }
-        out << "]\",[";
-
-        for (size_t j = 0; j < alfven_oas.size(); ++j) {
-            out << alfven_oas[j].alfvenicity;
-            if (j < alfven_oas.size() - 1) out << ";";
-        }
-        out << "]\n";
 
         std::cout << "Progress: " << (i + 1) << "/" << num_surfaces
-                  << " surfaces processed (n*q-m=" << nqm << ")\n";
+                  << " flux surfaces processed\n";
         std::cout.flush();
     }
 
@@ -174,11 +187,11 @@ int main(int argc, char** argv) {
 
     std::cout << "\n=== RESULTS SAVED ===\n";
     std::cout << "Data saved to continuum_with_sound_coupling.csv\n";
-    std::cout << "Columns: index, r/a, psi, q, n*q-m, sound_branches, "
+    std::cout << "Columns: n, index, r/a, psi, q, n*q, sound_branches, "
                  "alfven_branches, sound_omegas, sound_alfvenicities, "
                  "alfven_omegas, alfven_alfvenicities\n\n";
     std::cout << "Use this CSV to create plots of omega vs minor_radius\n";
-    std::cout << "where omega is interpolated from continuum using n*q-m as "
+    std::cout << "where omega is interpolated from continuum using n*q as "
                  "Floquet exponent\n";
     std::cout << "alfvenicity indicates wave character (0=Sound, 1=Alfven)\n";
 
