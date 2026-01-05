@@ -44,17 +44,8 @@ add_executable(facs src/main.cpp src/gFileRawData.cpp)
 target_include_directories(facs PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
 
-add_executable(test_two_dof src/test_two_dof.cpp src/gFileRawData.cpp)
-target_include_directories(test_two_dof PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
-
-add_executable(test_equilibrium_list src/test_equilibrium_list.cpp src/gFileRawData.cpp)
-target_include_directories(test_equilibrium_list PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
-
 add_executable(continuum_with_sound_coupling src/continuum_with_sound_coupling.cpp src/gFileRawData.cpp)
 target_include_directories(continuum_with_sound_coupling PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
-
-add_executable(test_single_surface src/test_single_surface.cpp src/gFileRawData.cpp)
-target_include_directories(test_single_surface PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
 
 add_executable(test_interpolation src/test_interpolation.cpp src/gFileRawData.cpp)
 target_include_directories(test_interpolation PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
