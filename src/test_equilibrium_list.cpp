@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
         double psi_target = (i + 0.5) / num_surfaces;
 
         NumericEquilibrium<double>* eq = new NumericEquilibrium<double>(
-            gfile_data, radial_grid, poloidal_grid, psi_ratio);
+            gfile_data, radial_grid, poloidal_grid);
 
         auto psi_range = eq->psi_range();
         double psi =

@@ -3,9 +3,9 @@
 #include <iostream>
 #include <vector>
 
+#include "../include/Floquet_two_dof.h"
 #include "../include/equilibrium.h"
 #include "../include/gFileRawData.h"
-#include "../include/two_dof_continuum.h"
 
 using namespace std::complex_literals;
 
@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
             gfile.close();
             if (gfile_data.is_complete()) {
                 equilibrium =
-                    new NumericEquilibrium<double>(gfile_data, 1000, 300, 0.96);
+                    new NumericEquilibrium<double>(gfile_data, 1000, 300);
                 params.eq = equilibrium;
                 params.use_geo = true;
                 params.psi = (equilibrium->psi_range().first +

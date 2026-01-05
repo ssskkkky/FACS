@@ -25,17 +25,18 @@ class Spdata {
     using value_type = T;
     using coord_type = double;
 
-    static constexpr std::size_t FIELD_NUM_2D = 5;
+    static constexpr std::size_t FIELD_NUM_2D = 6;
     static constexpr std::size_t FIELD_NUM_1D = 6;
 
     // The contour mesh grid of data stored here, and the resolution should be
     // higher than the output spec
     struct SpdataRaw_ {
-        // - magnetic_field
-        // - r
-        // - z
-        // - jacobian
-        // - \sqrt{g^{rr}}^{-1} \partial^2_\theta \sqrt{g^{rr}}
+        // - magnetic_field (normalized by magnetic_field_unit)
+        // - r (normalized by length_unit)
+        // - z (normalized by length_unit)
+        // - jacobian (normalized by magnetic_field_unit/length_unit)
+        // - \sqrt{g^{rr}}^{-1} \partial^2_\theta \sqrt{g^{rr}} (dimensionless)
+        // - \sqrt{g^{rr}} (gp_rt = |∇ψ|, normalized by current_unit)
         std::array<intp::Mesh<value_type, 2>, FIELD_NUM_2D> data_2d;
         // - safety_factor
         // - poloidal_current
@@ -54,11 +55,12 @@ class Spdata {
     struct SpdataIntp_ {
         std::vector<value_type> psi_sample_for_output;
 
-        // - magnetic_field
-        // - r
-        // - z
-        // - jacobian
-        // - \sqrt{g^{rr}}^{-1} \partial^2_\theta \sqrt{g^{rr}}
+        // - magnetic_field (normalized by magnetic_field_unit)
+        // - r (normalized by length_unit)
+        // - z (normalized by length_unit)
+        // - jacobian (normalized by magnetic_field_unit/length_unit)
+        // - \sqrt{g^{rr}}^{-1} \partial^2_\theta \sqrt{g^{rr}} (dimensionless)
+        // - \sqrt{g^{rr}} (gp_rt = |∇ψ|, normalized by current_unit)
         std::array<
             intp::InterpolationFunction<value_type, 2u, ORDER_OUT_, coord_type>,
             FIELD_NUM_2D>
@@ -265,6 +267,7 @@ class Spdata {
         intp::Mesh<value_type, 2> z_boozer(radial_sample, lst_ + 1);
         intp::Mesh<value_type, 2> jacobian_boozer(radial_sample, lst_ + 1);
         intp::Mesh<value_type, 2> radial_func_boozer(radial_sample, lst_ + 1);
+        intp::Mesh<value_type, 2> gp_rt_boozer(radial_sample, lst_ + 1);
 
         std::vector<value_type> safety_factor, pol_current_n, tor_current_n,
             pressure_n, r_minor_n, tor_flux_n;
@@ -370,6 +373,7 @@ class Spdata {
                 // be careful of normalization
 
                 auto b = b_field({r_grid, z_grid}, psi);
+                auto gp_rt_val = gp_rt({r_grid, z_grid}, psi);
 
                 magnetic_boozer(ri, i) = b / magnetic_field_unit;
                 r_boozer(ri, i) = r_grid / length_unit;
@@ -378,7 +382,8 @@ class Spdata {
                     (z_grid - g_file_data.magnetic_axis.y()) / length_unit;
                 jacobian_boozer(ri, i) =
                     coef / (b * b) * magnetic_field_unit / length_unit;
-                gp_rt_boozer_grid.push_back(gp_rt({r_grid, z_grid}, psi));
+                gp_rt_boozer_grid.push_back(gp_rt_val / current_unit);
+                gp_rt_boozer(ri, i) = gp_rt_val / current_unit;
             }
             // Resample on a sparser grid to avoid a noisy 2nd order derivative.
             // Smooth before interpolation might also help, e.g. convolution
@@ -434,11 +439,11 @@ class Spdata {
         return SpdataRaw_{
             {std::move(magnetic_boozer), std::move(r_boozer),
              std::move(z_boozer), std::move(jacobian_boozer),
-             std::move(radial_func_boozer)},
+             std::move(radial_func_boozer), std::move(gp_rt_boozer)},
             {std::move(safety_factor), std::move(pol_current_n),
              std::move(tor_current_n), std::move(pressure_n),
              std::move(r_minor_n), std::move(tor_flux_n)},
-            {b0n, R0 / length_unit, 0., q0 * g0n / (b0n * b0n), 0.},
+            {b0n, R0 / length_unit, 0., q0 * g0n / (b0n * b0n), 0., 0.},
             {q0, g0n, 0., p0n, 0., 0.},
             flux_unit};
     }

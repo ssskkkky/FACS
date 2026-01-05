@@ -110,49 +110,45 @@ inline std::array<std::array<double, 2>, 2> getMGeo(double theta,
                                                     const TwoDofParams& params,
                                                     bool withSoundGap) {
     // Compute theta-dependent quantities
-    double J2_matteo2019_times_B_axis =
-        params.eq->safety_factor(params.psi) *
-        params.eq->safety_factor(params.psi) *
-        std::sqrt(params.eq->j_func(params.psi, theta));
-    double B0_over_B_axis =
-        params.eq->intp_data().intp_2d[0](params.psi, theta);
-    double JB2_matteo2019 = J_matteo2019_times_B_axis * B0_over_B_axis *
-                            J_matteo2019_times_B_axis * B0_over_B_axis;
-    // double B0 = 1.0;
+    double J = params.eq->safety_factor(params.psi) *
+               std::sqrt(params.eq->j_func(params.psi, theta));
+    double B0 = params.eq->intp_data().intp_2d[0](params.psi, theta);
     double deriv_term = -params.eq->radial_func(params.psi, theta);
 
     // Compute kappa_g with theta dependence
     double eps = 0.01;
+
     double F_psi = params.eq->intp_data().intp_1d[1](params.psi);
     double R = params.eq->intp_data().intp_2d[1](params.psi, theta);
     double B_phi = F_psi / R;
     double B_p = std::sqrt(B0 * B0 - B_phi * B_phi);
-    double grad_psi = J / (params.eq->intp_data().intp_1d[0](params.psi) * R *
-                           B_p);  // ????????????????????????
+    double grad_psi = params.eq->intp_data().intp_2d[5](params.psi, theta);
     double dB_dtheta =
         (params.eq->intp_data().intp_2d[0](params.psi, theta + eps) -
          params.eq->intp_data().intp_2d[0](params.psi, theta - eps)) /
         (2 * eps);
-    double kappa_g = (F_psi / grad_psi) * (dB_dtheta / (JB2_matteo2019));
-    double omegaA_q_R0 = params.eq->safety_factor(params.psi);
-    double omegaS_q_R0 = std::sqrt(params.beta_val / 2.0) * omegaA_q_R0;
+    double dB_dtheta_over_B = dB_dtheta / B0;
+    double magnetic_pressure = B0 * B0;
+    double beta_val =
+        params.eq->intp_data().intp_1d[3](params.psi) / (B0 * B0 / 2.0);
+    // double kappa_g = (F_psi / grad_psi) * (dB_dtheta / (J * B0 * B0));
+    double omegaA_q_R0 = 1.0;  // This is actually vA^2/J_axis^2B_0^2
+    double omegaS_q_R0 =
+        std::sqrt(params.Gamma_val * beta_val / 2.0) * omegaA_q_R0;
 
     // Compute matrix elements
     double M11 =
-        (omega * omega * JB2_matteo2019) / (omegaA_q_R0 * omegaA_q_R0) -
-        deriv_term;
-    // double M11 = params.eq->radial_func(params.psi, theta) +
-    //              omega * omega * params.eq->j_func(params.psi, theta);
-    double M22 =
-        (omega * omega / (omegaS_q_R0 * omegaS_q_R0)) * (JB2_matteo2019);
+        (omega * omega * J * J) / (omegaA_q_R0 * omegaA_q_R0) - deriv_term;
+    // M11 = params.eq->radial_func(params.psi, theta) +
+    //       omega * omega * params.eq->j_func(params.psi, theta);
+    double M22 = (omega * omega / (omegaS_q_R0 * omegaS_q_R0)) * (J * J);
 
-    // Apply sound gap correction if enabled, of course this is just AI
-    // illusion, but I'd like to keep this interface
+    // Apply sound gap correction if enabled
     if (withSoundGap) { M22 *= (1.0 + deriv_term); }
 
-    double off_diag = std::sqrt(2 * params.Gamma_val * params.beta_val) *
-                      (J_matteo2019 * J_matteo2019) * kappa_g *
-                      (omega / omegaS_q_R0);
+    // double off_diag = std::sqrt(2 * params.Gamma_val * beta_val) *
+    //                   (J * J * B0 * B0) * kappa_g * (omega / omegaS_q_R0);
+    double off_diag = 2 * J * F_psi / grad_psi * dB_dtheta_over_B * omega;
     double M12 = off_diag;
     double M21 = off_diag;
     return {{{M11, M12}, {M21, M22}}};
@@ -751,10 +747,12 @@ class EigenwaveAnalyzer {
         double epsilon = 1e-6;
         for (const auto& data : soundWaveList) {
             double x = data.floquet_exponent.imag();
-            if (std::abs(x) < epsilon ||
-                std::abs(std::abs(x) - 0.5) < epsilon) {
-                continue;
-            }
+            double real_part = data.floquet_exponent.real();
+            if (std::abs(real_part) > epsilon) { continue; }
+            // if (std::abs(x) < epsilon ||
+            //     std::abs(std::abs(x) - 0.5) < epsilon) {
+            //     continue;
+            // }
             Point p;
             p.x = x;
             p.y = data.omega;
@@ -769,10 +767,12 @@ class EigenwaveAnalyzer {
         double epsilon = 1e-6;
         for (const auto& data : alfvenWaveList) {
             double x = data.floquet_exponent.imag();
-            if (std::abs(x) < epsilon ||
-                std::abs(std::abs(x) - 0.5) < epsilon) {
-                continue;
-            }
+            double real_part = data.floquet_exponent.real();
+            if (std::abs(real_part) > epsilon) { continue; }
+            // if (std::abs(x) < epsilon ||
+            //     std::abs(std::abs(x) - 0.5) < epsilon) {
+            //     continue;
+            // }
             Point p;
             p.x = x;
             p.y = data.omega;
@@ -818,7 +818,10 @@ class EigenwaveAnalyzer {
                       return a.omega < b.omega;
                   });
 
-        double min_spacing = min_spacing_factor * params.omegaS;
+        double min_spacing =
+            min_spacing_factor *
+            params.omegaS;  // This is in fact case by case, I should find more
+                            // robust way to do so
         for (const auto& oa : candidates) {
             if (result.empty()) {
                 result.push_back(oa);
@@ -867,7 +870,10 @@ class EigenwaveAnalyzer {
                       return a.omega < b.omega;
                   });
 
-        double min_spacing = min_spacing_factor * params.omegaA;
+        double min_spacing =
+            min_spacing_factor *
+            params.omegaS;  // This is in fact case by case, I should find more
+                            // robust way to do so
         for (const auto& oa : candidates) {
             if (result.empty()) {
                 result.push_back(oa);

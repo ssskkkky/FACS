@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Plot resonance continuum results from test_resonance_continuum
+Plot continuum results from continuum_with_sound_coupling
 X-axis: minor_radius (r/a) - equally spaced
 """
 
@@ -52,7 +52,9 @@ def read_resonance_data(filename):
     return data
 
 
-def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
+def plot_continuum_vs_minor_radius(
+    data, output_file="continuum_with_sound_coupling_vs_psi.png"
+):
     """Create Omega vs minor_radius plots"""
 
     r_vals = [d["minor_radius"] for d in data]
@@ -72,10 +74,10 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
         sound_r,
         sound_omega,
         c="blue",
-        s=50,
+        s=10,
         alpha=0.6,
-        edgecolors="white",
-        linewidth=0.5,
+        edgecolors="none",
+        linewidth=0,
         zorder=2,
     )
     ax1.set_xlabel("Minor radius r/a", fontsize=14, fontweight="bold")
@@ -95,10 +97,10 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
         alfven_r,
         alfven_omega,
         c="orange",
-        s=50,
+        s=10,
         alpha=0.7,
-        edgecolors="white",
-        linewidth=0.5,
+        edgecolors="none",
+        linewidth=0,
         zorder=2,
     )
     ax2.set_xlabel("Minor radius r/a", fontsize=14, fontweight="bold")
@@ -106,7 +108,7 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
     ax2.set_title("Alfvén Wave Continuum: Omega vs r/a", fontsize=15, fontweight="bold")
     ax2.grid(True, alpha=0.3)
 
-    # Plot 3: Combined continuum, graylevel by alfvenicity (1=dark, 0=invisible)
+    # Plot 3: Combined continuum, graylevel by alfvenicity (1=dark, 0.1=light)
     ax3 = fig.add_subplot(gs[1, 0])
     sound_count = 0
     alfven_count = 0
@@ -137,14 +139,25 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
         f"Debug: Plotted {sound_count} sound points, {alfven_count} alfven points in combined plot"
     )
 
+    # Rescale alpha to 0.1-1.0 range so sound waves are visible
+    all_alpha_scaled = [0.1 + 0.9 * alpha for alpha in all_alpha]
+
     ax3.scatter(
-        all_r, all_omega, c="black", s=50, alpha=all_alpha, edgecolors="none", zorder=2
+        all_r,
+        all_omega,
+        c="black",
+        s=10,
+        alpha=all_alpha_scaled,
+        edgecolors="none",
+        zorder=2,
     )
 
     ax3.set_xlabel("Minor radius r/a", fontsize=13, fontweight="bold")
     ax3.set_ylabel("Omega", fontsize=13, fontweight="bold")
     ax3.set_title(
-        "Combined Continuum (grayscale by alfvenicity)", fontsize=14, fontweight="bold"
+        "Combined Continuum (grayscale 0.1-1.0 by alfvenicity)",
+        fontsize=14,
+        fontweight="bold",
     )
     ax3.grid(True, alpha=0.3)
 
@@ -154,12 +167,12 @@ def plot_continuum_vs_minor_radius(data, output_file="continuum_vs_psi.png"):
 
 
 def main():
-    csv_file = "resonance_continuum.csv"
+    csv_file = "continuum_with_sound_coupling.csv"
     try:
         data = read_resonance_data(csv_file)
     except FileNotFoundError:
         print(f"Error: Could not find {csv_file}")
-        print("Please run test_resonance_continuum first to generate the data.")
+        print("Please run continuum_with_sound_coupling first to generate data.")
         return
 
     if len(data) == 0:

@@ -50,8 +50,8 @@ target_include_directories(test_two_dof PRIVATE $<BUILD_INTERFACE:${CMAKE_CURREN
 add_executable(test_equilibrium_list src/test_equilibrium_list.cpp src/gFileRawData.cpp)
 target_include_directories(test_equilibrium_list PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
 
-add_executable(test_resonance_continuum src/test_resonance_continuum.cpp src/gFileRawData.cpp)
-target_include_directories(test_resonance_continuum PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
+add_executable(continuum_with_sound_coupling src/continuum_with_sound_coupling.cpp src/gFileRawData.cpp)
+target_include_directories(continuum_with_sound_coupling PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)
 
 add_executable(test_single_surface src/test_single_surface.cpp src/gFileRawData.cpp)
 target_include_directories(test_single_surface PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>)

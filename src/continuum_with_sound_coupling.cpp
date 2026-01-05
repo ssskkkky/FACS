@@ -3,9 +3,9 @@
 #include <iostream>
 #include <vector>
 
+#include "../include/Floquet_two_dof.h"
 #include "../include/equilibrium.h"
 #include "../include/gFileRawData.h"
-#include "../include/two_dof_continuum.h"
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -39,7 +39,6 @@ int main(int argc, char** argv) {
 
     std::size_t radial_grid = 1000;
     std::size_t poloidal_grid = 300;
-    double psi_ratio = 0.96;
 
     int n = 5;
     int m = 10;
@@ -53,15 +52,14 @@ int main(int argc, char** argv) {
     std::cout << "withSoundGap = " << (withSoundGap ? "true" : "false") << "\n";
     std::cout << "Integration steps: " << steps << "\n\n";
 
-    NumericEquilibrium<double> eq(gfile_data, radial_grid, poloidal_grid,
-                                  psi_ratio);
+    NumericEquilibrium<double> eq(gfile_data, radial_grid, poloidal_grid);
     auto psi_range = eq.psi_range();
 
     std::cout << "=== EQUILIBRIUM INFO ===\n";
     std::cout << "Psi range: [" << psi_range.first << ", " << psi_range.second
               << "]\n\n";
 
-    std::ofstream out("resonance_continuum.csv");
+    std::ofstream out("continuum_with_sound_coupling.csv");
     out << "index,minor_radius,psi,q,nqm,sound_branches,alfven_branches,";
     out << "sound_omegas,sound_alfvenicities,alfven_omegas,alfven_"
            "alfvenicities\n";
@@ -121,7 +119,7 @@ int main(int argc, char** argv) {
         params.Gamma_val = Gamma_val;
 
         std::vector<double> omega_values;
-        for (double w = 0.001; w <= 2.0; w += 0.01) {
+        for (double w = 0.001; w <= 1.0; w += 0.005) {
             omega_values.push_back(w);
         }
 
@@ -175,7 +173,7 @@ int main(int argc, char** argv) {
     out.close();
 
     std::cout << "\n=== RESULTS SAVED ===\n";
-    std::cout << "Data saved to resonance_continuum.csv\n";
+    std::cout << "Data saved to continuum_with_sound_coupling.csv\n";
     std::cout << "Columns: index, r/a, psi, q, n*q-m, sound_branches, "
                  "alfven_branches, sound_omegas, sound_alfvenicities, "
                  "alfven_omegas, alfven_alfvenicities\n\n";

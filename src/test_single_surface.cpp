@@ -3,9 +3,9 @@
 #include <iostream>
 #include <vector>
 
+#include "../include/Floquet_two_dof.h"
 #include "../include/equilibrium.h"
 #include "../include/gFileRawData.h"
-#include "../include/two_dof_continuum.h"
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -38,8 +38,7 @@ int main(int argc, char** argv) {
     std::size_t poloidal_grid = 300;
     double psi_ratio = 0.96;
 
-    NumericEquilibrium<double> eq(gfile_data, radial_grid, poloidal_grid,
-                                  psi_ratio);
+    NumericEquilibrium<double> eq(gfile_data, radial_grid, poloidal_grid);
     auto psi_range = eq.psi_range();
 
     if (target_psi < psi_range.first || target_psi > psi_range.second) {
